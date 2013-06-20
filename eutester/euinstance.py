@@ -612,7 +612,7 @@ class EuInstance(Instance, TaggedResource):
         ''' 
         voldev = euvolume.guestdev.strip()
         self.assertFilePresent(voldev)
-        fillcmd = "dd if=/dev/zero of="+str(voldev)+"; sync"
+        fillcmd = "sudo dd if=/dev/zero of="+str(voldev)+"; sync"
         return self.time_dd(fillcmd)
 
     @Eutester.printinfo
@@ -648,7 +648,7 @@ class EuInstance(Instance, TaggedResource):
         else:
             timeout = timepergig * ((length/gb) or 1) 
             #write the volume id into the volume for starters
-            ddcmd = 'echo '+str(euvolume.id)+' | dd of='+str(voldev)
+            ddcmd = 'echo '+str(euvolume.id)+' | sudo dd of='+str(voldev)
             dd_res_for_id = self.dd_monitor(ddcmd=ddcmd, timeout=timeout)
             len_remaining = length - int(dd_res_for_id['dd_bytes'])
             self.debug('length remaining to write after adding volumeid:' + str(len_remaining))
@@ -762,7 +762,7 @@ class EuInstance(Instance, TaggedResource):
                 ddseek_str = str(' seek='+str(ddseek)+' ')
             else:
                  ddseek_str = ''
-            ddcmd = str('dd if='+str(ddif)+' of='+str(ddof)+str(ddseek_str)+str(ddbs_str)+str(ddcount_str))
+            ddcmd = str('sudo dd if='+str(ddif)+' of='+str(ddof)+str(ddseek_str)+str(ddbs_str)+str(ddcount_str))
             ret['ddcmd'] = ddcmd
         '''
         Due to the ssh psuedo tty, this is done in an ugly manner to get output of future usr1 signals 
@@ -894,7 +894,7 @@ class EuInstance(Instance, TaggedResource):
         
         voldev = euvolume.guestdev.strip()  
         #check to see if there's existing data that we should avoid overwriting 
-        if overwrite or ( int(self.sys('head -c '+str(length)+ ' '+str(voldev)+' | xargs -0 printf %s | wc -c')[0]) == 0):
+        if overwrite or ( int(self.sys('sudo head -c '+str(length)+ ' '+str(voldev)+' | xargs -0 printf %s | wc -c')[0]) == 0):
             
             self.random_fill_volume(euvolume, srcdev=srcdev, length=length)
         else:
@@ -935,7 +935,7 @@ class EuInstance(Instance, TaggedResource):
         if length == 0:
             md5 = str(self.sys("md5sum "+devpath, timeout=timeout)[0]).split(' ')[0].strip()
         else:
-            md5 = str(self.sys("head -c "+str(length)+" "+str(devpath)+" | md5sum")[0]).split(' ')[0].strip()
+            md5 = str(self.sys("sudo head -c "+str(length)+" "+str(devpath)+" | md5sum")[0]).split(' ')[0].strip()
         return md5
         
     def reboot_instance_and_verify(self,
