@@ -1102,7 +1102,14 @@ class EuInstance(Instance, TaggedResource):
         
         voldev = euvolume.guestdev.strip()  
         #check to see if there's existing data that we should avoid overwriting 
-        if overwrite or ( int(self.sys('head -c '+str(length)+ ' '+str(voldev)+' | xargs -0 printf %s | wc -c')[0]) == 0):
+        #check to make sure there were no sudo resolution errors
+        results = self.sys('head -c '+str(length)+ ' '+str(voldev)+' | xargs -0 printf %s | wc -c')
+        for content in results:
+            if content.startswith("sudo"):
+                results.remove(content)
+                break
+
+        if overwrite or ( int(results[0]) == 0):
             
             self.random_fill_volume(euvolume, srcdev=srcdev, length=length)
             #length = dd_dict['dd_bytes']
@@ -1205,7 +1212,12 @@ class EuInstance(Instance, TaggedResource):
         
 
     def get_uptime(self):
-        return int(self.sys('cat /proc/uptime', code=0)[0].split()[1].split('.')[0])
+        results = self.sys('cat /proc/uptime', code=0)
+        for content in results:
+              if content.startswith("sudo"):
+                  results.remove(content)
+                  break
+        return int(results[0].split()[1].split('.')[0])
 
 
     def attach_euvolume_list(self,list,intervoldelay=0, timepervol=90, md5len=32):
