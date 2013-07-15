@@ -617,9 +617,21 @@ class EuInstance(Instance, TaggedResource):
         ### If i can reach the metadata service ip use it to get metadata otherwise try the clc directly
         try:
             self.sys("ping -c 1 169.254.169.254", code=0, verbose=False)
-            return self.sys("curl http://169.254.169.254/"+str(prefix)+str(element_path), code=0)
+            """ Check to make sure there were no sudo resolution errors"""
+            results = self.sys("curl http://169.254.169.254/"+str(prefix)+str(element_path), code=0)
+            for content in results:
+                if content.startswith("sudo"):
+                    results.remove(content)
+                    break
+            return results
         except:
-            return self.sys("curl http://" + self.tester.get_ec2_ip()  + ":8773/"+str(prefix) + str(element_path), code=0)
+            """ Check to make sure there were no sudo resolution errors"""
+            results = self.sys("curl http://" + self.tester.get_ec2_ip()  + ":8773/"+str(prefix) + str(element_path), code=0)
+            for content in results:
+                if content.startswith("sudo"):
+                    results.remove(content)
+                    break
+            return results
         
     def set_block_device_prefix(self):
         return self.set_rootfs_device()
