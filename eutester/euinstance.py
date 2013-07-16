@@ -308,8 +308,14 @@ class EuInstance(Instance, TaggedResource):
         if try_non_root_exec is None:
             try_non_root_exec = self.try_non_root_exec
         if self.username != 'root' and try_non_root_exec:
+            """ Check to make sure there were no sudo resolution errors"""
             if self.use_sudo:
-                return self.sys_with_sudo(cmd, verbose=verbose, code=code, enable_debug=enable_debug, timeout=timeout)
+                results = self.sys_with_sudo(cmd, verbose=verbose, code=code, enable_debug=enable_debug, timeout=timeout)
+                for content in results:
+                    if content.startswith("sudo"):
+                        results.remove(content)
+                        break
+                return results
             else:
                 return self.sys_with_su(cmd, verbose=verbose, code=code, enable_debug=enable_debug, timeout=timeout)
 
@@ -617,21 +623,10 @@ class EuInstance(Instance, TaggedResource):
         ### If i can reach the metadata service ip use it to get metadata otherwise try the clc directly
         try:
             self.sys("ping -c 1 169.254.169.254", code=0, verbose=False)
-            """ Check to make sure there were no sudo resolution errors"""
-            results = self.sys("curl http://169.254.169.254/"+str(prefix)+str(element_path), code=0)
-            for content in results:
-                if content.startswith("sudo"):
-                    results.remove(content)
-                    break
-            return results
+            return self.sys("curl http://169.254.169.254/"+str(prefix)+str(element_path), code=0)
         except:
             """ Check to make sure there were no sudo resolution errors"""
-            results = self.sys("curl http://" + self.tester.get_ec2_ip()  + ":8773/"+str(prefix) + str(element_path), code=0)
-            for content in results:
-                if content.startswith("sudo"):
-                    results.remove(content)
-                    break
-            return results
+            return self.sys("curl http://" + self.tester.get_ec2_ip()  + ":8773/"+str(prefix) + str(element_path), code=0)
         
     def set_block_device_prefix(self):
         return self.set_rootfs_device()
@@ -1103,13 +1098,7 @@ class EuInstance(Instance, TaggedResource):
         voldev = euvolume.guestdev.strip()  
         #check to see if there's existing data that we should avoid overwriting 
         #check to make sure there were no sudo resolution errors
-        results = self.sys('head -c '+str(length)+ ' '+str(voldev)+' | xargs -0 printf %s | wc -c')
-        for content in results:
-            if content.startswith("sudo"):
-                results.remove(content)
-                break
-
-        if overwrite or ( int(results[0]) == 0):
+        if overwrite or ( int(self.sys('head -c '+str(length)+ ' '+str(voldev)+' | xargs -0 printf %s | wc -c')[0]) == 0):
             
             self.random_fill_volume(euvolume, srcdev=srcdev, length=length)
             #length = dd_dict['dd_bytes']
@@ -1212,12 +1201,7 @@ class EuInstance(Instance, TaggedResource):
         
 
     def get_uptime(self):
-        results = self.sys('cat /proc/uptime', code=0)
-        for content in results:
-              if content.startswith("sudo"):
-                  results.remove(content)
-                  break
-        return int(results[0].split()[1].split('.')[0])
+        return int(self.sys('cat /proc/uptime', code=0)[0].split()[1].split('.')[0])
 
 
     def attach_euvolume_list(self,list,intervoldelay=0, timepervol=90, md5len=32):
