@@ -637,3 +637,82 @@ class IAMops(Eutester):
         certs = self.euare.list_server_certs(path_prefix=path_prefix, marker=marker, max_items=max_items)
         self.debug(certs)
         return certs
+ 
+    def create_instance_profile(self, instance_profile_name, path="/", delegate_account=None):
+        """
+        Create an Instance Profile.
+
+        :param instance_profile_name: name of the instance profile to create.
+        :param path: path for instance profile
+        :param delegate_account: str can be used by Cloud admin in Eucalyptus to choose an account to operate on
+        """
+        self.debug("Attempting to create instances profile: " + instance_profile_name)
+        params = {'InstanceProfileName': instance_profile_name,
+                  'Path': path}
+        if delegate_account:
+            params['DelegateAccount'] = delegate_account
+        self.euare.get_response('CreateInstanceProfile', params)
+
+    def get_instance_profile(self, instance_profile_name, delegate_account=None):
+        """
+        Retrieve a specific Instance Profile.
+
+        :param instance_profile_name: name of the instance profile to create.
+        :param delegate_account: str can be used by Cloud admin in Eucalyptus to choose an account to operate on
+        """
+        self.debug("Attempting to retrieve the instance profile: " + instance_profile_name)
+        params = {'InstanceProfileName': instance_profile_name}
+        if delegate_account:
+            params['DelegateAccount'] = delegate_account
+        instance_profile = self.euare.get_response('GetInstanceProfile', params)
+        self.debug(instance_profile)
+        return instance_profile
+
+    def create_role(self, policy_json, role_name, path="/", delegate_account=None):
+        """
+        Create a Role.
+
+        :param policy_json: policy that grants entity permission to assume the role.
+        :param role_name: name of the role to create.
+        :param path: path for the role.
+        :param delegate_account: str can be used by Cloud admin in Eucalyptus to choose an account to operate on
+        """
+        self.debug("Attempting to create role: " + role_name)
+        params = {'AssumeRolePolicyDocument': policy_json,
+                  'RoleName': role_name,
+                  'Path': path}
+        if delegate_account:
+            params['DelegateAccount'] = delegate_account
+        self.euare.get_response('CreateRole', params)
+
+    def get_role(self, role_name, delegate_account=None):
+        """
+        Retrieve a specific a Role.
+
+        :param role_name: name of the role to create.
+        :param delegate_account: str can be used by Cloud admin in Eucalyptus to choose an account to operate on
+        """
+        self.debug("Attempting to retrieve role: " + role_name)
+        params = {'RoleName': role_name}
+        if delegate_account:
+            params['DelegateAccount'] = delegate_account
+        role = self.euare.get_response('GetRole', params)
+        self.debug(role)
+        return role
+        
+    def add_role_to_instance_profile(self, instance_profile_name, role_name, delegate_account=None):
+        """
+        Add specified Role to Instance Profile.
+
+        :param instance_profile_name: name of the instance profile to create.
+        :param role_name: name of the role to add.
+        :param path: path for instance profile
+        :param delegate_account: str can be used by Cloud admin in Eucalyptus to choose an account to operate on
+        """
+        self.debug("Attempting to add role " + role_name + " to instance profile: " + instance_profile_name)
+        params = {'InstanceProfileName': instance_profile_name,
+                  'RoleName': role_name}
+        if delegate_account:
+            params['DelegateAccount'] = delegate_account
+        self.euare.get_response('AddRoleToInstanceProfile', params, verb='POST')
+
