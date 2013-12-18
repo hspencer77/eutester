@@ -58,9 +58,9 @@ class InstanceBasics(EutesterTestCase):
         self.private_addressing = False
         if instance_profile_name:
             self.instance_profile_name = instance_profile_name
-            self.instance_profile_id = None
-        elif instance_profile_id:
-            self.instance_profile_id = instance_profile_id
+            self.instance_profile_arn = None
+        elif instance_profile_arn:
+            self.instance_profile_arn = instance_profile_arn
             self.instance_profile_name = None
         if not zone:
             zones = self.tester.ec2.get_all_zones()
@@ -115,14 +115,14 @@ class InstanceBasics(EutesterTestCase):
                                                                 self.instance_profile_arn), 'Incorrect Instance Profile ARN')
             # Check to see if instance profile ARN is at least 20 characters and at a maximum 2048 characters 
             # based on AWS IAM InstanceProfile data type definition
-            self.assertGreaterEqual(len(instance.get_metadata("iam/info/instance-profile-arn")[0]), 20, 'Instance Profile ARN is less than 20 characters')
-            self.assertLessEqual(len(instance.get_metadata("iam/info/instance-profile-arn")[0]), 2048, 'Instance Profile ARN is greater than 2048 characters')
+            self.assertTrue(len(instance.get_metadata("iam/info/instance-profile-arn")[0]) >= 20, 'Instance Profile ARN is less than 20 characters')
+            self.assertTrue(len(instance.get_metadata("iam/info/instance-profile-arn")[0]) <= 2048, 'Instance Profile ARN is greater than 2048 characters')
             # Check to see if instance profile ID exists
             self.assertTrue(instance.get_metadata("iam/info/instance-profile-id")[0], 'Instance Profile ID Not Present in Metadata')
             # Check to see if instance profile ID is at least 16 characters and at a maximum 32 characters 
             # based on AWS IAM InstanceProfile data type definition
-            self.assertGreaterEqual(len(instance.get_metadata("iam/info/instance-profile-id")[0]), 16, 'Instance Profile ID is less than 16 characters')
-            self.assertLessEqual(len(instance.get_metadata("iam/info/instance-profile-id")[0]), 32, 'Instance Profile ID is greater than 32 characters')
+            self.assertTrue(len(instance.get_metadata("iam/info/instance-profile-id")[0]) >= 16, 'Instance Profile ID is less than 16 characters')
+            self.assertTrue(len(instance.get_metadata("iam/info/instance-profile-id")[0]) <= 32, 'Instance Profile ID is greater than 32 characters')
             # Check to see if instance profile LastUpdated exists
             self.assertTrue(instance.get_metadata("iam/info/last-updated-date")[0], 'Instance Profile LastUpdated Not Present in Metadata')
             # Check to see if iam/security-credentials/<role-name> is available, then check contents

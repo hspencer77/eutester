@@ -2516,7 +2516,7 @@ disable_root: false"""
                   user_data=None,
                   private_addressing=False, 
                   instance_profile_name=None,
-                  instance_profile_arn,
+                  instance_profile_arn=None,
                   username="root", 
                   password=None,
                   auto_connect=True,
