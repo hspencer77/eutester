@@ -130,8 +130,9 @@ class InstanceBasics(EutesterTestCase):
             try:
                 role_name = instance.get_metadata("iam/security-credentials/")[0]
                 temp_creds = json.load(instance.get_metadata("iam/security-credentials/%s"%role_name))
-            else:
-                raise
+            except Exception, e:
+                self.log.critical("Unable to access IAM Role temporary credentials:\n"+ str(e))
+                raise e
             self.assertTrue(temp_creds['LastUpdated'].encode('ascii'), "LastUpdated does not exist in " + role_name + " temporary credentials") 
             self.assertTrue(temp_creds['AccessKeyId'].encode('ascii'), "AccessKeyId does not exist in " + role_name + " temporary credentials") 
             self.assertTrue(temp_creds['SecretAccessKey'].encode('ascii'), "SecretAccessKey does not exist in " + role_name + " temporary credentials") 
