@@ -2,8 +2,8 @@
 #
 #
 # Description:  This script encompasses test cases/modules concerning instance specific behavior and
-#               features for Eucalyptus.  The test cases/modules that are executed can be 
-#               found in the script under the "tests" list.
+#               features regarding the metadata service with regards to IAM roles and instance profiles in Eucalyptus.
+#               The test cases/modules that are executed can be found in the script under the "tests" list.
 
 import time
 from concurrent.futures import ThreadPoolExecutor
@@ -95,7 +95,7 @@ class InstanceBasics(EutesterTestCase):
         """
         This case was developed to test the metadata service regarding instance profile of an instance for consistency.
         The following meta-data attributes are tested:
-           - iam/security-credentials/<Instance Profile Name>
+           - iam/security-credentials/<role-name>
            - iam/info/instance-profile-arn
            - iam/info/instance-profile-id
            - iam/info/last-updated-date
@@ -108,8 +108,8 @@ class InstanceBasics(EutesterTestCase):
         for instance in reservation.instances:
             # Check to see if instance profile ARN/Name matches metadata instance-profile-arn
             if self.instance_profile_name:
-                self.assertTrue(re.search(instance.get_metadata("iam/info/instance-profile-arn")[0], 
-                                                                self.instance_profile_name), 'Incorrect Instance Profile Name')
+                self.assertTrue(re.search(self.instance_profile_name, 
+                                                                instance.get_metadata("iam/info/instance-profile-arn")[0]), 'Incorrect Instance Profile Name')
             else:
                 self.assertTrue(re.match(instance.get_metadata("iam/info/instance-profile-arn")[0], 
                                                                 self.instance_profile_arn), 'Incorrect Instance Profile ARN')
@@ -129,9 +129,9 @@ class InstanceBasics(EutesterTestCase):
             self.assertTrue(instance.get_metadata("iam/security-credentials/")[0], 'IAM Role Not Available in Metadata')
             try:
                 role_name = instance.get_metadata("iam/security-credentials/")[0]
-                temp_creds = json.load(instance.get_metadata("iam/security-credentials/%s"%role_name))
+                temp_creds = json.loads(''.join(instance.get_metadata("iam/security-credentials/%s"%role_name)))
             except Exception, e:
-                self.log.critical("Unable to access IAM Role temporary credentials:\n"+ str(e))
+                self.tester.debug("Unable to access IAM Role temporary credentials:\n"+ str(e))
                 raise e
             self.assertTrue(temp_creds['LastUpdated'].encode('ascii'), "LastUpdated does not exist in " + role_name + " temporary credentials") 
             self.assertTrue(temp_creds['AccessKeyId'].encode('ascii'), "AccessKeyId does not exist in " + role_name + " temporary credentials") 
