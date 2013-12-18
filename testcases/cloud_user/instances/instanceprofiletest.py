@@ -135,6 +135,10 @@ class InstanceBasics(EutesterTestCase):
                 raise e
             self.assertTrue(temp_creds['LastUpdated'].encode('ascii'), "LastUpdated does not exist in " + role_name + " temporary credentials") 
             self.assertTrue(temp_creds['AccessKeyId'].encode('ascii'), "AccessKeyId does not exist in " + role_name + " temporary credentials") 
+            # Check to see if AccessKeyId is at least 16 characters and at a maximum 32 characters 
+            # based on AWS STS Credentials data type definition
+            self.assertTrue(len(temp_creds['AccessKeyId'].encode('ascii')) >= 16, 'AccessKeyId is less than 16 characters')
+            self.assertTrue(len(temp_creds['AccessKeyId'].encode('ascii')) <= 32, 'AccessKeyId is greater than 32 characters')
             self.assertTrue(temp_creds['SecretAccessKey'].encode('ascii'), "SecretAccessKey does not exist in " + role_name + " temporary credentials") 
             self.assertTrue(temp_creds['Token'].encode('ascii'), "Token does not exist in " + role_name + " temporary credentials") 
             self.assertTrue(temp_creds['Expiration'].encode('ascii'), "Expiration does not exist in " + role_name + " temporary credentials") 
