@@ -15,6 +15,8 @@ from eucaops import EC2ops
 import os
 import re
 import random
+import StringIO
+import difflib
 
 
 class InstanceBasics(EutesterTestCase):
@@ -55,6 +57,10 @@ class InstanceBasics(EutesterTestCase):
         self.address = None
         self.volume = None
         self.private_addressing = False
+        if not user_data:
+            self.user_data_file = 'testcases/cloud_user/instances/user-data-tests/userdata-max-size.txt'
+        else:
+            self.user_data_file = None
         if not zone:
             zones = self.tester.ec2.get_all_zones()
             self.zone = random.choice(zones).name
@@ -62,9 +68,9 @@ class InstanceBasics(EutesterTestCase):
             self.zone = zone
         self.reservation = None
         self.reservation_lock = threading.Lock()
-        self.run_instance_params = {'image': self.image, 'user_data': user_data, 'username': instance_user,
-                                    'keypair': self.keypair.name, 'group': self.group.name, 'zone': self.zone,
-                                    'timeout': self.instance_timeout}
+        self.run_instance_params = {'image': self.image, 'user_data': user_data, 'user_data_file': self.user_data_file,
+                                    'username': instance_user, 'keypair': self.keypair.name, 'group': self.group.name,
+                                    'zone': self.zone, 'timeout': self.instance_timeout}
         self.managed_network = True
 
         ### If I have access to the underlying infrastructure I can look
@@ -237,6 +243,29 @@ class InstanceBasics(EutesterTestCase):
                                 'No fail message on invalid meta-data node')
         self.set_reservation(reservation)
         return reservation
+
+    def UserData(self):
+         """
+         This case was developed to test the user-data service of an instance for consistency.
+         This case does a comparison of the user data passed in by the user-data argument to
+         the data supplied by the user-data service within the instance. Supported
+         user data formats can be found here: https://cloudinit.readthedocs.org/en/latest/topics/format.html
+         If this test fails, the test case will error out; logging the results.
+         The userdata tested is 16K string (maximum size of userdata string defined by AWS)
+         """
+         if not self.reservation:
+             reservation = self.tester.run_instance(**self.run_instance_params)
+         else:
+             reservation = self.reservation
+         for instance in reservation.instances:
+             """
+             For aesthetics, the user data value is a 16K file thats converted to string then compare,
+             """
+             if self.user_data_file:
+                 with open(self.user_data_file) as user_data_file:
+                     user_data = user_data_file.read()
+                 instance_user_data = StringIO.StringIO(instance.get_userdata())
+                 self.assertTrue(difflib.SequenceMatcher(None, instance_user_data.getvalue(), user_data), 'Incorrect User Data File')
 
     def DNSResolveCheck(self):
         """
@@ -419,7 +448,7 @@ if __name__ == "__main__":
 
     ### Either use the list of tests passed from config/command line to determine what subset of tests to run
     test_list = testcase.args.tests or ["BasicInstanceChecks", "DNSResolveCheck", "Reboot", "MetaData", "ElasticIps",
-                                        "MultipleInstances", "LargestInstance", "PrivateIPAddressing", "Churn"]
+                                        "UserData", "MultipleInstances", "LargestInstance", "PrivateIPAddressing", "Churn"]
     ### Convert test suite methods to EutesterUnitTest objects
     unit_list = []
     for test in test_list:

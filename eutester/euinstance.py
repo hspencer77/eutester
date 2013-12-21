@@ -668,6 +668,10 @@ class EuInstance(Instance, TaggedResource):
                 return self.sys("curl http://" + self.tester.get_ec2_ip()  + ":8773/"+str(prefix) + str(element_path), code=0)
             else:
                 raise(se)
+    
+    def get_userdata(self, element_path, prefix='latest/user-data/'):
+        """Return the lines of metadata from the element path provided"""
+        return self.get_metadata(element_path, prefix)
           
     def set_block_device_prefix(self):
         return self.set_rootfs_device()
