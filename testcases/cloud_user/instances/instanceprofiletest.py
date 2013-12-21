@@ -117,14 +117,10 @@ class InstanceBasics(EutesterTestCase):
             # based on AWS IAM InstanceProfile data type definition
             self.assertTrue(len(instance.get_metadata("iam/info/instance-profile-arn")[0]) >= 20, 'Instance Profile ARN is less than 20 characters')
             self.assertTrue(len(instance.get_metadata("iam/info/instance-profile-arn")[0]) <= 2048, 'Instance Profile ARN is greater than 2048 characters')
-            # Check to see if instance profile ID exists
-            self.assertTrue(instance.get_metadata("iam/info/instance-profile-id")[0], 'Instance Profile ID Not Present in Metadata')
             # Check to see if instance profile ID is at least 16 characters and at a maximum 32 characters 
             # based on AWS IAM InstanceProfile data type definition
             self.assertTrue(len(instance.get_metadata("iam/info/instance-profile-id")[0]) >= 16, 'Instance Profile ID is less than 16 characters')
             self.assertTrue(len(instance.get_metadata("iam/info/instance-profile-id")[0]) <= 32, 'Instance Profile ID is greater than 32 characters')
-            # Check to see if instance profile LastUpdated exists
-            self.assertTrue(instance.get_metadata("iam/info/last-updated-date")[0], 'Instance Profile LastUpdated Not Present in Metadata')
             # Check date format of instance profile LastUpdated
             self.assertTrue(re.match('(\d{4})[/.-](\d{2})[/.-](\d{2})T(\d{2})[/.:](\d{2})[/.:](\d{2})Z',instance.get_metadata("iam/info/last-updated-date")[0]),
                             'Incorrect date format for Instance Profile LastUpdated')
@@ -136,18 +132,15 @@ class InstanceBasics(EutesterTestCase):
             except Exception, e:
                 self.tester.debug("Unable to access IAM Role temporary credentials:\n"+ str(e))
                 raise e
-            self.assertTrue(temp_creds['LastUpdated'].encode('ascii'), "LastUpdated does not exist in " + role_name + " temporary credentials") 
             # Check date format of temporary credentials LastUpdated variable
             self.assertTrue(re.match('(\d{4})[/.-](\d{2})[/.-](\d{2})T(\d{2})[/.:](\d{2})[/.:](\d{2})Z',temp_creds['LastUpdated'].encode('ascii')),
                             'Incorrect date format for temporary credentials LastUpdated variable')
-            self.assertTrue(temp_creds['AccessKeyId'].encode('ascii'), "AccessKeyId does not exist in " + role_name + " temporary credentials") 
             # Check to see if AccessKeyId is at least 16 characters and at a maximum 32 characters 
             # based on AWS STS Credentials data type definition
             self.assertTrue(len(temp_creds['AccessKeyId'].encode('ascii')) >= 16, 'AccessKeyId is less than 16 characters')
             self.assertTrue(len(temp_creds['AccessKeyId'].encode('ascii')) <= 32, 'AccessKeyId is greater than 32 characters')
             self.assertTrue(temp_creds['SecretAccessKey'].encode('ascii'), "SecretAccessKey does not exist in " + role_name + " temporary credentials") 
             self.assertTrue(temp_creds['Token'].encode('ascii'), "Token does not exist in " + role_name + " temporary credentials") 
-            self.assertTrue(temp_creds['Expiration'].encode('ascii'), "Expiration does not exist in " + role_name + " temporary credentials") 
             # Check date format of temporary credentials Expiration variable
             self.assertTrue(re.match('(\d{4})[/.-](\d{2})[/.-](\d{2})T(\d{2})[/.:](\d{2})[/.:](\d{2})Z',temp_creds['Expiration'].encode('ascii')),
                             'Incorrect date format for temporary credentials Expiration variable')
