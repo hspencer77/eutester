@@ -669,8 +669,9 @@ class EuInstance(Instance, TaggedResource):
             else:
                 raise(se)
     
-    def get_userdata(self, element_path, prefix='latest/user-data/'):
-        """Return the lines of metadata from the element path provided"""
+    def get_userdata(self, prefix='latest/user-data/'):
+        """Return the userdata"""
+        element_path = "" 
         return self.get_metadata(element_path, prefix)
           
     def set_block_device_prefix(self):

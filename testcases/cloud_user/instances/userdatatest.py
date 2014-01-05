@@ -115,7 +115,7 @@ class InstanceBasics(EutesterTestCase):
                 instance_user_data = StringIO.StringIO(instance.get_userdata())
                 self.assertTrue(difflib.SequenceMatcher(None, instance_user_data.getvalue(), user_data), 'Incorrect User Data File')
             elif self.user_data:
-                self.assertTrue(re.search(instance.get_userdata(), self.user_data), 'Incorrect User Data String')
+                self.assertEqual(instance.get_userdata()[0], self.user_data, 'Incorrect User Data String')
 
 
 if __name__ == "__main__":
