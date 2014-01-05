@@ -15,8 +15,6 @@ from eucaops import EC2ops
 import os
 import re
 import random
-import StringIO
-import difflib
 
 
 class InstanceBasics(EutesterTestCase):
