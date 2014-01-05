@@ -58,9 +58,8 @@ class InstanceBasics(EutesterTestCase):
         self.volume = None
         self.private_addressing = False
         if not user_data:
-            self.user_data_file = 'testcases/cloud_user/instances/user-data-tests/userdata-max-size.txt'
-        else:
-            self.user_data_file = None
+            ### Set userdata string to 16K to test max string size for userdata
+            self.user_data = self.tester.id_generator(16000)
         if not zone:
             zones = self.tester.ec2.get_all_zones()
             self.zone = random.choice(zones).name
@@ -68,8 +67,8 @@ class InstanceBasics(EutesterTestCase):
             self.zone = zone
         self.reservation = None
         self.reservation_lock = threading.Lock()
-        self.run_instance_params = {'image': self.image, 'user_data': user_data, 'user_data_file': self.user_data_file,
-                                    'username': instance_user, 'keypair': self.keypair.name, 'group': self.group.name,
+        self.run_instance_params = {'image': self.image, 'user_data': self.user_data, 'username': instance_user, 
+                                    'keypair': self.keypair.name, 'group': self.group.name,
                                     'zone': self.zone, 'timeout': self.instance_timeout}
         self.managed_network = True
 
@@ -245,27 +244,26 @@ class InstanceBasics(EutesterTestCase):
         return reservation
 
     def UserData(self):
-         """
-         This case was developed to test the user-data service of an instance for consistency.
-         This case does a comparison of the user data passed in by the user-data argument to
-         the data supplied by the user-data service within the instance. Supported
-         user data formats can be found here: https://cloudinit.readthedocs.org/en/latest/topics/format.html
-         If this test fails, the test case will error out; logging the results.
-         The userdata tested is 16K string (maximum size of userdata string defined by AWS)
-         """
-         if not self.reservation:
-             reservation = self.tester.run_instance(**self.run_instance_params)
-         else:
-             reservation = self.reservation
-         for instance in reservation.instances:
-             """
-             For aesthetics, the user data value is a 16K file thats converted to string then compare,
-             """
-             if self.user_data_file:
-                 with open(self.user_data_file) as user_data_file:
-                     user_data = user_data_file.read()
-                 instance_user_data = StringIO.StringIO(instance.get_userdata())
-                 self.assertTrue(difflib.SequenceMatcher(None, instance_user_data.getvalue(), user_data), 'Incorrect User Data File')
+        """
+        This case was developed to test the user-data service of an instance for consistency.
+        This case does a comparison of the user data passed in by the user-data argument to
+        the data supplied by the user-data service within the instance. Supported
+        user data formats can be found here: https://cloudinit.readthedocs.org/en/latest/topics/format.html
+        If this test fails, the test case will error out; logging the results.
+        The userdata tested is 16K string (maximum size of userdata string defined by AWS)
+        """
+        if not self.reservation:
+            reservation = self.tester.run_instance(**self.run_instance_params)
+        else:
+            reservation = self.reservation
+        for instance in reservation.instances:
+            """
+            For aesthetics, the user data value is a 16K file thats converted to string then compare,
+            """
+            if self.user_data:
+                self.assertEqual(instance.get_userdata()[0], self.user_data, 'Incorrect User Data String')
+        self.set_reservation(reservation)
+        return reservation
 
     def DNSResolveCheck(self):
         """
