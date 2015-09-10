@@ -232,11 +232,10 @@ class ComputeSigV4Test(EutesterTestCase):
                        'Authorization': authorization_header}
             request_url = region['endpoint'] + '?' + request_parameters
             self.tester.info("\nAWS SigV4 Compute Test "
-                             + "against {region} "
-                             + "endpoint".format(region=region['name']))
+                             + "against " + region['name']
+                             + " endpoint")
             self.tester.info("\nBEGIN REQUEST +++++++++++++++++++++++++++++++")
-            self.tester.info("Request URL = {request_url}".format(
-                              request_url=request_url))
+            self.tester.info("Request URL = " + request_url)
             # Perform request
             try:
                 sigv4_request = requests.get(request_url,
@@ -245,17 +244,16 @@ class ComputeSigV4Test(EutesterTestCase):
             except requests.exceptions.ConnectionError:
                 self.tester.debug("Connection error occurred using "
                                   + "endpoint "
-                                  + "{fqdn}".format(fqdn=region['endpoint']))
+                                  + region['endpoint'])
             except requests.exceptions.Timeout:
                 self.tester.debug("Connection timeout occurred using "
                                   + "endpoint "
-                                  + "{fqdn}".format(fqdn=region['endpoint']))
+                                  + region['endpoint'])
             except requests.exceptions.RequestException as e:
                 self.tester.debug("Exception occurred "
                                   + "during 'GET' request using "
-                                  + "{url}"
-                                  + " : {error}".format(url=request_url,
-                                                        error=e.message))
+                                  + request_url
+                                  + ": " + e.message)
                 raise e
             # Process response into readable XML
             sigv4_xml_resp = xml.dom.minidom.parseString(sigv4_request.text)
