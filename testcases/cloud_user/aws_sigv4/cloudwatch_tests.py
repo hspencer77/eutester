@@ -14,11 +14,11 @@ import requests
 import xml.dom.minidom
 
 
-class ComputeSigV4Test(EutesterTestCase):
+class CloudWatchSigV4Test(EutesterTestCase):
     def __init__(self, extra_args=None):
         """
         Function to initialize testcase
-        for AWS SigV4 against Compute (EC2) Service
+        for AWS SigV4 against CloudWatch Service
 
         param: ---credpath: path to directory
                location of Eucalyptus credentials
@@ -42,8 +42,11 @@ class ComputeSigV4Test(EutesterTestCase):
         # Gather endpoint information for each region
         self.regions = []
         for region in self.tester.ec2.get_all_regions():
+            endpoint = str(region.endpoint)
+            cw_endpoint = endpoint.replace('compute',
+                                            'monitoring')
             region_info = {'name': str(region.name),
-                           'endpoint': str(region.endpoint)}
+                           'endpoint': cw_endpoint}
             self.regions.append(region_info)
 
     @classmethod
@@ -68,8 +71,8 @@ class ComputeSigV4Test(EutesterTestCase):
         parameters.
         """
         method = 'GET'
-        service = 'ec2'
-        request_parameters = 'Action=DescribeRegions&Version=2013-10-15'
+        service = 'cloudwatch'
+        request_parameters = 'Action=ListMetrics&Version=2010-08-01'
         return (method, service, request_parameters)
 
     def sign(self, key, msg):
@@ -181,7 +184,7 @@ class ComputeSigV4Test(EutesterTestCase):
     def sigV4Test(self):
         """
         Function to execute testcase that deomnstrates
-        support for AWS signature 4 for Compute (EC2) Service.
+        support for AWS signature 4 for CloudWatch Service.
         For more information please refer to
         http://docs.aws.amazon.com/general/
         latest/gr/signature-version-4.html
@@ -189,7 +192,7 @@ class ComputeSigV4Test(EutesterTestCase):
         for region in self.regions:
             # Grab information from request parameters
             (method, service, request_parameters) = self.request_params()
-            # Strip http:// from endpoint
+            # Strip http:// or https:// from endpoint
             host = region['endpoint'].strip('http://https://')
 
             # Define amzdate and datestamp off current time
@@ -262,8 +265,8 @@ class ComputeSigV4Test(EutesterTestCase):
                               "AWS SigV4 Request Failed.")
 
 if __name__ == "__main__":
-    # Define ComputeSigV4Test testcase
-    testcase = ComputeSigV4Test()
+    # Define CloudWatchSigV4Test testcase
+    testcase = CloudWatchSigV4Test()
     list = ['sigV4Test']
     unit_list = []
     for test in list:
