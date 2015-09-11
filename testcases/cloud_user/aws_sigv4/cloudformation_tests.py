@@ -6,7 +6,6 @@ Purpose:  Testcase to demonstrate and confirm that AWS
 Author:   Harold Spencer Jr. (https://github.com/hspencer77)
 """
 from eucaops import Eucaops
-from eucaops import EC2ops
 from eutester.eutestcase import EutesterTestCase
 import datetime
 import hashlib
@@ -15,11 +14,11 @@ import requests
 import xml.dom.minidom
 
 
-class ComputeSigV4Test(EutesterTestCase):
+class CloudformationSigV4Test(EutesterTestCase):
     def __init__(self, extra_args=None):
         """
         Function to initialize testcase
-        for AWS SigV4 against Compute (EC2) Service
+        for AWS SigV4 against Cloudformation Service
 
         param: ---credpath: path to directory
                location of Eucalyptus credentials
@@ -36,19 +35,18 @@ class ComputeSigV4Test(EutesterTestCase):
                 self.parser.add_argument(arg)
         self.get_args()
 
-        if self.args.region:
-            self.tester = EC2ops(credpath=self.args.credpath,
-                                 region=self.args.region)
-        else:
-            self.tester = Eucaops(credpath=self.args.credpath,
-                                  config_file=self.args.config,
-                                  password=self.args.password)
+        self.tester = Eucaops(credpath=self.args.credpath,
+                              config_file=self.args.config,
+                              password=self.args.password)
 
         # Gather endpoint information for each region
         self.regions = []
         for region in self.tester.ec2.get_all_regions():
+            endpoint = str(region.endpoint)
+            cfn_endpoint = endpoint.replace('compute',
+                                            'cloudformation')
             region_info = {'name': str(region.name),
-                           'endpoint': str(region.endpoint)}
+                           'endpoint': cfn_endpoint}
             self.regions.append(region_info)
 
     @classmethod
@@ -73,8 +71,8 @@ class ComputeSigV4Test(EutesterTestCase):
         parameters.
         """
         method = 'GET'
-        service = 'ec2'
-        request_parameters = 'Action=DescribeRegions&Version=2013-10-15'
+        service = 'cloudformation'
+        request_parameters = 'Action=DescribeStacks&Version=2010-05-15'
         return (method, service, request_parameters)
 
     def sign(self, key, msg):
@@ -186,7 +184,7 @@ class ComputeSigV4Test(EutesterTestCase):
     def sigV4Test(self):
         """
         Function to execute testcase that deomnstrates
-        support for AWS signature 4 for Compute (EC2) Service.
+        support for AWS signature 4 for Cloudformation Service.
         For more information please refer to
         http://docs.aws.amazon.com/general/
         latest/gr/signature-version-4.html
@@ -194,7 +192,7 @@ class ComputeSigV4Test(EutesterTestCase):
         for region in self.regions:
             # Grab information from request parameters
             (method, service, request_parameters) = self.request_params()
-            # Strip http:// from endpoint
+            # Strip http:// or https:// from endpoint
             host = region['endpoint'].strip('http://https://')
 
             # Define amzdate and datestamp off current time
@@ -267,8 +265,8 @@ class ComputeSigV4Test(EutesterTestCase):
                               "AWS SigV4 Request Failed.")
 
 if __name__ == "__main__":
-    # Define ComputeSigV4Test testcase
-    testcase = ComputeSigV4Test()
+    # Define CloudformationSigV4Test testcase
+    testcase = CloudformationSigV4Test()
     list = ['sigV4Test']
     unit_list = []
     for test in list:
