@@ -1,14 +1,11 @@
 #!/usr/bin/env python
 import re
-import string
 import random
 import socket
 import os
 from eucaops import Eucaops
-from eucaops import EC2ops
-from eutester.euinstance import EuInstance
 from eutester.eutestcase import EutesterTestCase
-from awacs.aws import Action, Allow, Policy, Principal, Statement
+from awacs.aws import Action, Allow, Policy, Statement
 from awacs.ec2 import ARN as EC2_ARN
 
 
@@ -27,7 +24,6 @@ class ComputeResourceLevelTest(EutesterTestCase):
                               password=self.args.password)
         self.testers = []
         self.regions = []
-        self.reserved_addresses = []
         self.keypairs = []
         for region in self.tester.ec2.get_all_regions():
             region_info = {'name': str(region.name),
@@ -36,10 +32,11 @@ class ComputeResourceLevelTest(EutesterTestCase):
 
     def clean_method(self):
         for tester in self.testers:
-           try:
-               tester.show_euare_whoami()
-           except: pass
-           tester.cleanup_artifacts()
+            try:
+                tester.show_euare_whoami()
+            except:
+                pass
+            tester.cleanup_artifacts()
         self.tester.delete_account('ec2-account',
                                    recursive=True)
         for key in self.keypairs:
@@ -55,7 +52,7 @@ class ComputeResourceLevelTest(EutesterTestCase):
                                                  delegate_account=account_name)
             access_key = keys['access_key_id']
             secret_key = keys['secret_access_key']
-            self.tester.debug("Creating EC2ops object with access key "
+            self.tester.debug("Creating Eucaops object with access key "
                               + access_key + " and secret key "
                               + secret_key)
             new_tester = Eucaops(aws_access_key_id=access_key,
@@ -94,27 +91,32 @@ class ComputeResourceLevelTest(EutesterTestCase):
                          Sid=sid,
                          Effect=Allow,
                          Action=[Action("ec2", "*")],
-                         Resource=[EC2_ARN("instance/*"),],
+                         Resource=[EC2_ARN("instance/*")],
                      ),
                  ],
              )
         self.tester.debug("Applying " + policy_id + " policy to "
-                          + group_name + " group") 
+                          + group_name + " group")
         self.tester.attach_policy_group(group_name,
                                         policy_id,
                                         pd.to_json(),
                                         delegate_account=account_name)
 
-    def setup_instance_resources(self, tester, region):
+    def connect_to_ec2_endpoint(self, tester, region):
         if re.search('^https', region['endpoint']):
             ssl_flag = True
         else:
             ssl_flag = False
         endpoint = region['endpoint'].strip(':8773/')
         fqdn_endpoint = endpoint.strip('http://https://')
-        ip_endpoint = socket.gethostbyname(fqdn_endpoint)
+        try:
+            ip_endpoint = socket.gethostbyname(fqdn_endpoint)
+        except Exception as e:
+            self.errormsg("Unable to resolve Compute endpoint to "
+                          + fqdn_endpoint + ": " + str(e))
+            raise e
         tester.info("Establishing EC2 connection to " + region['name']
-                   + " region")
+                    + " region")
         try:
             tester.setup_ec2_connection(
                         endpoint=ip_endpoint,
@@ -124,10 +126,14 @@ class ComputeResourceLevelTest(EutesterTestCase):
                         port=8773,
                         path="services/compute",
                         is_secure=ssl_flag)
-        except Exception, e:
+        except Exception as e:
             self.errormsg("Unable to establish EC2 connection to "
-                          + "region " + region['name'])
+                          + "region " + region['name'] + ": " + str(e))
             raise e
+        return tester
+
+    def setup_instance_resources(self, tester, region):
+        tester = self.connect_to_ec2_endpoint(tester, region)
         zone = random.choice(tester.get_zones())
         keypair = tester.add_keypair("keypair-" + tester.id_generator())
         keypath = '%s/%s.pem' % (os.curdir, keypair.name)
@@ -156,80 +162,63 @@ class ComputeResourceLevelTest(EutesterTestCase):
                             'Instance did not go to running')
             self.assertTrue(tester.ping(instance.ip_address),
                             'Could not ping instance')
-        tester.show_addresses(None, True)
-        address = tester.allocate_address()
-        tester.info("Allocate address "
-                   + address.public_ip + " for instance resource "
-                   + "test in region " + region['name'])
-        addr_info = {'region': region['name'],
-                     'address': address}
-        self.reserved_addresses.append(addr_info)
 
     def test_instance_resources(self, tester, region):
-        if re.search('^https', region['endpoint']):
-            ssl_flag = True
-        else:
-            ssl_flag = False
-        endpoint = region['endpoint'].strip(':8773/')
-        fqdn_endpoint = endpoint.strip('http://https://')
-        ip_endpoint = socket.gethostbyname(fqdn_endpoint)
-        tester.info("Establishing EC2 connection to " + region['name']
-                   + " region")
-        try:
-            tester.setup_ec2_connection(
-                        endpoint=ip_endpoint,
-                        region=region['name'],
-                        aws_access_key_id=tester.ec2.aws_access_key_id,
-                        aws_secret_access_key=tester.ec2.aws_secret_access_key,
-                        port=8773,
-                        path="services/compute",
-                        is_secure=ssl_flag)
-        except Exception, e:
-            self.errormsg("Unable to establish EC2 connection to "
-                          + "region " + region['name'])
-            raise e
+        tester = self.connect_to_ec2_endpoint(tester, region)
         reservations = tester.ec2.get_all_reservations()
-        tester.info("Execute DescribeInstances as " 
-                   + tester.username + " user")
+        tester.info("Execute DescribeInstances as "
+                    + tester.username + " user")
         for reservation in reservations:
             self.assertIsNotNone(reservation,
                                  msg=("DescribeInstances failed for "
                                       + region['name'] + " region."))
+            for instance in reservation.instances:
+                tester.info("Execute DescribeInstanceAttribute for "
+                            + "instance " + instance.id
+                            + "in region " + region['name'])
+                inst_attr = tester.ec2.get_instance_attribute(
+                                instance.id, 'instanceType')
+                self.assertIsNotNone(inst_attr,
+                                     msg=("DescribeInstanceAttribute "
+                                          + "to grab instance type "
+                                          + "failed for " + instance.id
+                                          + " in region " + region['name']))
+                tester.info("Execute GetConsoleOutput for "
+                            + "instance " + instance.id
+                            + "in region " + region['name'])
+                self.assertIsNotNone(instance.get_console_output().output,
+                                     msg=("GetConsoleOuptut failed "
+                                          + "for " + instance.id
+                                          + " in region " + region['name']))
+                tester.info("Execute CreateTags for "
+                            + "instance " + instance.id
+                            + "in region " + region['name'])
+                try:
+                    instance.add_tag("Purpose",
+                                     "Test CreateTags with " + instance.id)
+                except Exception as e:
+                    self.errormsg("Failed to execute CreateTags with "
+                                  + instance.id + " in region "
+                                  + region['name'] + ": " + str(e))
+                    raise e
+                tester.info("Execute DescribeTags for "
+                            + "instance " + instance.id
+                            + "in region " + region['name'])
+                self.assertIsNotNone(instance.tags['Purpose'],
+                                     msg=("DescribeTags for instance "
+                                          + instance.id + "failed in "
+                                          + "region " + region['name']))
+        tester.info("Execute DescribeInstanceStatus as "
+                    + tester.username + " user")
+        stats = tester.ec2.get_all_instance_status()
+        for entry in stats:
+            self.assertIsNotNone(entry.state_name,
+                                 msg=("DescribeInstanceStatus failed for "
+                                      + "instance(s) in "
+                                      + "region " + region['name']))
 
     def remove_instance_resources(self, tester, region):
-        if re.search('^https', region['endpoint']):
-            ssl_flag = True
-        else:
-            ssl_flag = False
-        endpoint = region['endpoint'].strip(':8773/')
-        fqdn_endpoint = endpoint.strip('http://https://')
-        ip_endpoint = socket.gethostbyname(fqdn_endpoint)
-        tester.info("Establishing EC2 connection to " + region['name']
-                   + " region")
-        try:
-            tester.setup_ec2_connection(
-                        endpoint=ip_endpoint,
-                        region=region['name'],
-                        aws_access_key_id=tester.ec2.aws_access_key_id,
-                        aws_secret_access_key=tester.ec2.aws_secret_access_key,
-                        port=8773,
-                        path="services/compute",
-                        is_secure=ssl_flag)
-        except Exception, e:
-            self.errormsg("Unable to establish EC2 connection to "
-                          + "region " + region['name'])
-            raise e
-        if self.args.clean_on_exit:
-            tester.info("Terminate all instances in "
-                        + "region " + region['name'])
-            reservations = tester.ec2.get_all_reservations()
-            for reservation in reservations:
-                tester.terminate_instances(reservation)
-            tester.info("Release allocated addresses in "
-                        + "region " + region['name'])
-            for addr_info in self.reserved_addresses:
-                if addr_info['region'] == region['name']:
-                    tester.release_address(addr_info['address'])
+        tester = self.connect_to_ec2_endpoint(tester, region)
 
     def InstanceResourceLevel(self):
         account_name = 'ec2-account'
@@ -238,7 +227,7 @@ class ComputeResourceLevelTest(EutesterTestCase):
         self.tester.info("Creating " + account_name)
         self.tester.create_account(account_name)
         self.tester.info("Creating " + group_name
-                          + " in account " + account_name)
+                         + " in account " + account_name)
         self.tester.create_group(group_name, "/",
                                  delegate_account=account_name)
         self.group_policy_add(group_name, account_name)
@@ -253,12 +242,12 @@ class ComputeResourceLevelTest(EutesterTestCase):
                 for region in self.regions:
                     self.setup_instance_resources(resource_tester, region)
             else:
-               self.test_instance_resources(resource_tester, region)
+                for region in self.regions:
+                    self.test_instance_resources(resource_tester, region)
         for resource_tester in self.testers:
             if resource_tester.username == 'admin':
                 for region in self.regions:
                     self.remove_instance_resources(resource_tester, region)
-                    
 
 if __name__ == '__main__':
     testcase = ComputeResourceLevelTest()
@@ -266,5 +255,7 @@ if __name__ == '__main__':
     unit_list = []
     for test in list:
         unit_list.append(testcase.create_testunit_by_name(test))
-    result = testcase.run_test_case_list(unit_list, clean_on_exit=testcase.args.clean_on_exit)
+    result = testcase.run_test_case_list(
+                         unit_list,
+                         clean_on_exit=testcase.args.clean_on_exit)
     exit(result)
