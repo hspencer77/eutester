@@ -1,4 +1,11 @@
 #!/usr/bin/env python
+"""
+Purpose:  Testcase to confirm resoure-level permissions
+          for Compute (EC2) API actions are supported
+          in a Eucalyptus environment
+
+Author:   Harold Spencer, Jr. (https://github.com/hspencer77)
+"""
 import re
 import random
 import socket
@@ -11,6 +18,14 @@ from awacs.ec2 import ARN as EC2_ARN
 
 class ComputeResourceLevelTest(EutesterTestCase):
     def __init__(self):
+        """
+        Function to initialize testcase to
+        confirm resource-level permissions are
+        supported for Compute (EC2) API actions
+
+        param: --credpath: path to directory
+                location of Eucalyptus credentials
+        """
         self.setuptestcase()
         self.setup_parser()
         self.parser.add_argument('--clean_on_exit',
@@ -31,18 +46,35 @@ class ComputeResourceLevelTest(EutesterTestCase):
             self.regions.append(region_info)
 
     def clean_method(self):
+        """
+        Function to clean up artifacts associated
+        with test case.
+        """
         for tester in self.testers:
             try:
                 tester.show_euare_whoami()
             except:
                 pass
             tester.cleanup_artifacts()
+        # Delete account, groups, users
         self.tester.delete_account('ec2-account',
                                    recursive=True)
+        # Remove keypairs created
         for key in self.keypairs:
             os.remove(key)
 
     def setup_users(self, account_name, group_name, user_name):
+        """
+        Function to set up users under a given account as
+        testers.  For each user, the following is created:
+        - access key id
+        - secret key
+        - Eucaops object
+
+        param: account_name: IAM (Euare) account
+        param: group_name: IAM (Euare) group
+        param: user_name: IAM (Euare) user
+        """
         users = ['admin', user_name]
         self.tester.info("Setting up users in " + account_name)
         for user in users:
@@ -73,6 +105,7 @@ class ComputeResourceLevelTest(EutesterTestCase):
                                  elb_path=self.tester.elb.path,
                                  username=user, account=account_name)
             self.testers.append(new_tester)
+            # If not 'admin' user, add user to group
             if user != 'admin':
                 self.tester.debug("Adding " + user + " to "
                                   + group_name)
@@ -81,6 +114,14 @@ class ComputeResourceLevelTest(EutesterTestCase):
                                               delegate_account=account_name)
 
     def group_policy_add(self, group_name, account_name):
+        """
+        Function to create IAM access policy with resource-level
+        permission, then apply the policy to a group
+        under the account.
+
+        param: group_name: IAM (Euare) group
+        param: account_name: IAM (Euare) account
+        """
         policy_id = "EC2-Instance-Resource-Level-Permissions"
         sid = "Stmt" + self.tester.id_generator()
         pd = Policy(
@@ -103,6 +144,13 @@ class ComputeResourceLevelTest(EutesterTestCase):
                                         delegate_account=account_name)
 
     def connect_to_ec2_endpoint(self, tester, region):
+        """
+        Function to establish EC2 connection to a
+        specific region (based on endpoint)
+
+        param: tester: Eucaops object
+        param: region: region (i.e. cloud) name/endpoint information
+        """
         if re.search('^https', region['endpoint']):
             ssl_flag = True
         else:
@@ -133,6 +181,12 @@ class ComputeResourceLevelTest(EutesterTestCase):
         return tester
 
     def setup_instance_resources(self, tester, region):
+        """
+        Function to set up EC2 instance resources
+
+        param: tester: Eucaops object ('admin' user)
+        param: region: region (i.e. cloud) name/endpoint information
+        """
         tester = self.connect_to_ec2_endpoint(tester, region)
         zone = random.choice(tester.get_zones())
         keypair = tester.add_keypair("keypair-" + tester.id_generator())
@@ -143,6 +197,7 @@ class ComputeResourceLevelTest(EutesterTestCase):
         tester.authorize_group_by_name(group_name=group.name,
                                        port=-1,
                                        protocol="icmp")
+        # Use supplied EMI, if not find instance-store backed EMI
         if self.args.emi:
             image = tester.get_emi(emi=self.args.emi)
         else:
@@ -158,14 +213,25 @@ class ComputeResourceLevelTest(EutesterTestCase):
                   'timeout': 600}
         reservation = tester.run_image(**params)
         for instance in reservation.instances:
+            # Confirm instance reaches 'running' state
             self.assertTrue(tester.wait_for_reservation(reservation),
                             'Instance did not go to running')
+            # Confirm instance can be pinged
             self.assertTrue(tester.ping(instance.ip_address),
                             'Could not ping instance')
 
     def test_instance_resources(self, tester, region):
+        """
+        Function to perform Compute (EC2) API actions
+        to confirm access to all instances under the
+        account.
+
+        param: tester: Eucaops object ('instance_admin' user)
+        param: region: region (i.e. cloud) name/endpoint information
+        """
         tester = self.connect_to_ec2_endpoint(tester, region)
         reservations = tester.ec2.get_all_reservations()
+        # Test DescribeInstances
         tester.info("Execute DescribeInstances as "
                     + tester.username + " user")
         for reservation in reservations:
@@ -173,6 +239,7 @@ class ComputeResourceLevelTest(EutesterTestCase):
                                  msg=("DescribeInstances failed for "
                                       + region['name'] + " region."))
             for instance in reservation.instances:
+                # Test DescribeInstanceAttribute
                 tester.info("Execute DescribeInstanceAttribute for "
                             + "instance " + instance.id
                             + "in region " + region['name'])
@@ -183,6 +250,7 @@ class ComputeResourceLevelTest(EutesterTestCase):
                                           + "to grab instance type "
                                           + "failed for " + instance.id
                                           + " in region " + region['name']))
+                # Test GetConsoleOutput
                 tester.info("Execute GetConsoleOutput for "
                             + "instance " + instance.id
                             + "in region " + region['name'])
@@ -190,6 +258,7 @@ class ComputeResourceLevelTest(EutesterTestCase):
                                      msg=("GetConsoleOuptut failed "
                                           + "for " + instance.id
                                           + " in region " + region['name']))
+                # Test CreateTags
                 tester.info("Execute CreateTags for "
                             + "instance " + instance.id
                             + "in region " + region['name'])
@@ -201,6 +270,7 @@ class ComputeResourceLevelTest(EutesterTestCase):
                                   + instance.id + " in region "
                                   + region['name'] + ": " + str(e))
                     raise e
+                # Test DescribeTags
                 tester.info("Execute DescribeTags for "
                             + "instance " + instance.id
                             + "in region " + region['name'])
@@ -208,6 +278,7 @@ class ComputeResourceLevelTest(EutesterTestCase):
                                      msg=("DescribeTags for instance "
                                           + instance.id + "failed in "
                                           + "region " + region['name']))
+        # Test DescribeInstanceStatus
         tester.info("Execute DescribeInstanceStatus as "
                     + tester.username + " user")
         stats = tester.ec2.get_all_instance_status()
@@ -218,43 +289,80 @@ class ComputeResourceLevelTest(EutesterTestCase):
                                       + "region " + region['name']))
 
     def remove_instance_resources(self, tester, region):
-        tester = self.connect_to_ec2_endpoint(tester, region)
+        """
+        Function to remove instances from under account
 
-    def InstanceResourceLevel(self):
+        param: tester: Eucaops object ('admin' user of account)
+        param: region: region (i.e. cloud) name/endpoint information
+        """
+        tester = self.connect_to_ec2_endpoint(tester, region)
+        reservations = tester.ec2.get_all_reservations()
+        for reservation in reservations:
+            tester.terminate_instances(reservation)
+
+    def InstanceResourceLevelTest(self):
+        """
+        Function to execute testcase to confirm
+        support Compute API actions for resource-level defined ARN
+        for instance(s) under a given IAM (Euare) account.
+
+        IAM access policy contains the following:
+        - Effect: Allow
+        - Action: All EC2 actions (i.e. ec2:*)
+        - Resource: All instances (i.e. arn:aws:ec2:::instance/*)
+
+        The following is performed:
+        * IAM (Euare) account/user/group creation
+        * IAM access policy with resource ARN defined for all
+          instances.
+        * Creation of instances by 'admin' user of account
+        * Test API actions associated with instances under the
+          account by 'instance_admin' user
+        * Removal of instances by 'admin' user of account
+        """
         account_name = 'ec2-account'
         group_name = 'ec2_instance_admins'
         user_name = 'instance_admin'
         self.tester.info("Creating " + account_name)
+        # Create 'ec2-account' account
         self.tester.create_account(account_name)
         self.tester.info("Creating " + group_name
                          + " in account " + account_name)
+        # Create 'ec2_instance_admins' group and add IAM policy
         self.tester.create_group(group_name, "/",
                                  delegate_account=account_name)
         self.group_policy_add(group_name, account_name)
+        # Create 'instance_admin' user
         self.tester.create_user(user_name,
                                 "/",
                                 delegate_account=account_name)
+        # Set up test users
         self.setup_users(account_name,
                          group_name,
                          user_name)
         for resource_tester in self.testers:
             if resource_tester.username == 'admin':
+                # If 'admin' user, create EC2 resources
                 for region in self.regions:
                     self.setup_instance_resources(resource_tester, region)
             else:
+                # Test API actions against instance resources
                 for region in self.regions:
                     self.test_instance_resources(resource_tester, region)
         for resource_tester in self.testers:
             if resource_tester.username == 'admin':
+                # If 'admin' user, remove EC2 resources
                 for region in self.regions:
                     self.remove_instance_resources(resource_tester, region)
 
 if __name__ == '__main__':
+    # Define ComputeResourceLevelTest testcase
     testcase = ComputeResourceLevelTest()
-    list = ['InstanceResourceLevel']
+    list = ['InstanceResourceLevelTest']
     unit_list = []
     for test in list:
         unit_list.append(testcase.create_testunit_by_name(test))
+    # Execute testcase
     result = testcase.run_test_case_list(
                          unit_list,
                          clean_on_exit=testcase.args.clean_on_exit)
