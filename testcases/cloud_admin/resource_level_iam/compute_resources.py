@@ -13,7 +13,6 @@ import os
 from eucaops import Eucaops
 from eutester.eutestcase import EutesterTestCase
 from awacs.aws import Action, Allow, Policy, Statement
-from awacs.ec2 import ARN as EC2_ARN
 
 
 class ComputeResourceLevelTest(EutesterTestCase):
@@ -40,6 +39,7 @@ class ComputeResourceLevelTest(EutesterTestCase):
         self.testers = []
         self.regions = []
         self.keypairs = []
+        self.accounts = []
         for region in self.tester.ec2.get_all_regions():
             region_info = {'name': str(region.name),
                            'endpoint': str(region.endpoint)}
@@ -50,18 +50,26 @@ class ComputeResourceLevelTest(EutesterTestCase):
         Function to clean up artifacts associated
         with test case.
         """
+        # Delete account, groups, users
+        for account in self.accounts:
+            self.tester.delete_account(account,
+                                       recursive=True)
+        # Remove keypairs created
+        for key in self.keypairs:
+            os.remove(key)
+
+    def remove_testers(self):
+        """
+        Function to remove testers after testcase
+        has completed.
+        """
         for tester in self.testers:
             try:
                 tester.show_euare_whoami()
             except:
                 pass
             tester.cleanup_artifacts()
-        # Delete account, groups, users
-        self.tester.delete_account('ec2-account',
-                                   recursive=True)
-        # Remove keypairs created
-        for key in self.keypairs:
-            os.remove(key)
+            self.testers.remove(tester)
 
     def setup_users(self, account_name, group_name, user_name):
         """
@@ -113,7 +121,9 @@ class ComputeResourceLevelTest(EutesterTestCase):
                                               user,
                                               delegate_account=account_name)
 
-    def group_policy_add(self, group_name, account_name):
+    def group_policy_add(self, group_name, account_name,
+                         account_id=None, region=None,
+                         instance_id=None):
         """
         Function to create IAM access policy with resource-level
         permission, then apply the policy to a group
@@ -121,9 +131,21 @@ class ComputeResourceLevelTest(EutesterTestCase):
 
         param: group_name: IAM (Euare) group
         param: account_name: IAM (Euare) account
+        param: account_id: Account ID
+        param: region: region (i.e. cloud) name/endpoint information
+        param: instance_id: instance ID
         """
         policy_id = "EC2-Instance-Resource-Level-Permissions"
         sid = "Stmt" + self.tester.id_generator()
+        if account_id is None:
+            account_id = ""
+        if region is None:
+            region = ""
+        if instance_id is None:
+            instance_id = "*"
+        ec2_arn = ("arn:aws:ec2:" + region + ":"
+                   + account_id + ":"
+                   + "instance/" + instance_id)
         pd = Policy(
                  Version="2012-10-17",
                  Id=policy_id,
@@ -132,16 +154,23 @@ class ComputeResourceLevelTest(EutesterTestCase):
                          Sid=sid,
                          Effect=Allow,
                          Action=[Action("ec2", "*")],
-                         Resource=[EC2_ARN("instance/*")],
+                         Resource=[ec2_arn],
                      ),
                  ],
              )
         self.tester.debug("Applying " + policy_id + " policy to "
                           + group_name + " group")
-        self.tester.attach_policy_group(group_name,
-                                        policy_id,
-                                        pd.to_json(),
-                                        delegate_account=account_name)
+        try:
+            self.tester.attach_policy_group(group_name,
+                                            policy_id,
+                                            pd.to_json(),
+                                            delegate_account=account_name)
+        except Exception as e:
+            self.tester.debug("Policy failed to be applied "
+                              + "to group " + group_name
+                              + ": " + str(e))
+            return False
+        return True
 
     def connect_to_ec2_endpoint(self, tester, region):
         """
@@ -300,6 +329,163 @@ class ComputeResourceLevelTest(EutesterTestCase):
         for reservation in reservations:
             tester.terminate_instances(reservation)
 
+    def InstanceWildcardResourceLevelTest(self):
+        """
+        [**] NEGATIVE TEST [**]
+        Function to execute testcase to confirm
+        malformed document error when IAM access policies for
+        Compute API actions with resource-level defined ARN
+        (containing wildcards for 'region' and 'account-id') for instance(s)
+        under a given IAM (Euare) account.
+
+        IAM access policy contains the following:
+        - Effect: Allow
+        - Action: All EC2 actions (i.e. ec2:*)
+        - Resource: All instances (i.e. arn:aws:ec2:*:*:instance/*)
+
+        The following is performed:
+        * IAM (Euare) account/user/group creation
+        * IAM access policy with resource ARN, which contains
+          wildcard (*) for 'region' and 'account-id',
+          defined for all instances.
+        """
+        account_name = 'wildcards-acct-account'
+        self.accounts.append(account_name)
+        group_name = 'ec2_instance_admins'
+        self.tester.info("Creating " + account_name)
+        # Create 'ec2-account' account
+        self.tester.create_account(account_name)
+        self.tester.info("Creating " + group_name
+                         + " in account " + account_name)
+        # Create 'ec2_instance_admins' group and add IAM policy
+        self.tester.create_group(group_name, "/",
+                                 delegate_account=account_name)
+        region_name = "*"
+        account_id = "*"
+        result = self.group_policy_add(group_name, account_name,
+                                       account_id=account_id,
+                                       region=region_name)
+        # Confirm IAM policy wasn't accepted
+        self.tester.debug("Applied malformed policy. Test should"
+                          + " pass on failed upload of policy.")
+        self.assertFalse(result, msg=("Malformed IAM access policy "
+                         + "with wildcard(*) value for 'region' and "
+                         + "'account-id' was accepted"))
+
+    def InstanceAccountResourceLevelTest(self):
+        """
+        Function to execute testcase to confirm
+        support Compute API actions for resource-level defined ARN
+        (containing 'account-id') for instance(s)
+        under a given IAM (Euare) account.
+
+        IAM access policy contains the following:
+        - Effect: Allow
+        - Action: All EC2 actions (i.e. ec2:*)
+        - Resource: All instances (i.e. arn:aws:ec2::<account-id>:instance/*)
+
+        The following is performed:
+        * IAM (Euare) account/user/group creation
+        * IAM access policy with resource ARN, which contains
+          'account-id',  defined for all instances.
+        * Creation of instances by 'admin' user of account
+        * Test API actions associated with instances under the
+          account by 'instance_admin' user
+        * Removal of instances by 'admin' user of account
+        """
+        account_name = 'strict-acct-account'
+        self.accounts.append(account_name)
+        group_name = 'ec2_instance_admins'
+        user_name = 'instance_admin'
+        self.tester.info("Creating " + account_name)
+        # Create 'ec2-account' account
+        self.tester.create_account(account_name)
+        self.tester.info("Creating " + group_name
+                         + " in account " + account_name)
+        # Create 'ec2_instance_admins' group and add IAM policy
+        self.tester.create_group(group_name, "/",
+                                 delegate_account=account_name)
+        try:
+            usr = self.tester.get_users_from_account(
+                                          delegate_account=account_name)
+        except Exception as e:
+            self.errormsg("Failed obtain 'admin' user "
+                          + " from account "
+                          + account_name + ": " + str(e))
+            raise e
+        admin_user = usr[0]
+        account_id = str(admin_user['arn'].split(':')[4])
+        result = self.group_policy_add(group_name, account_name,
+                                       account_id=account_id)
+        if result:
+            # Create 'instance_admin' user
+            self.tester.create_user(user_name,
+                                    "/",
+                                    delegate_account=account_name)
+            # Set up test users
+            self.setup_users(account_name,
+                             group_name,
+                             user_name)
+            for resource_tester in self.testers:
+                if resource_tester.username == 'admin':
+                    # If 'admin' user, create EC2 resources
+                    for region in self.regions:
+                        self.setup_instance_resources(resource_tester,
+                                                      region)
+                else:
+                    # Test API actions against instance resources
+                    for region in self.regions:
+                        self.test_instance_resources(resource_tester,
+                                                     region)
+            for resource_tester in self.testers:
+                if resource_tester.username == 'admin':
+                    # If 'admin' user, remove EC2 resources
+                    for region in self.regions:
+                        self.remove_instance_resources(resource_tester,
+                                                       region)
+            # Remove testers from self.testers list
+            self.remove_testers()
+
+    def InstanceWildcardAccountResourceLevelTest(self):
+        """
+        [**] NEGATIVE TEST [**]
+        Function to execute testcase to confirm
+        malformed document error for IAM access policy for
+        Compute API actions with resource-level defined ARN
+        (containing a wildcard for 'account-id') for instance(s)
+        under a given IAM (Euare) account.
+
+        IAM access policy contains the following:
+        - Effect: Allow
+        - Action: All EC2 actions (i.e. ec2:*)
+        - Resource: All instances (i.e. arn:aws:ec2::*:instance/*)
+
+        The following is performed:
+        * IAM (Euare) account/user/group creation
+        * IAM access policy with resource ARN, which contains
+          a wildcard for 'account-id',  defined for all instances.
+        """
+        account_name = 'wildcardacct-acct-account'
+        self.accounts.append(account_name)
+        group_name = 'ec2_instance_admins'
+        self.tester.info("Creating " + account_name)
+        # Create 'ec2-account' account
+        self.tester.create_account(account_name)
+        self.tester.info("Creating " + group_name
+                         + " in account " + account_name)
+        # Create 'ec2_instance_admins' group and add IAM policy
+        self.tester.create_group(group_name, "/",
+                                 delegate_account=account_name)
+        account_id = "*"
+        result = self.group_policy_add(group_name, account_name,
+                                       account_id=account_id)
+        # Confirm IAM policy wasn't accepted
+        self.tester.debug("Applied malformed policy. Test should"
+                          + " pass on failed upload of policy.")
+        self.assertFalse(result, msg=("Malformed IAM access policy "
+                         + "with wildcard(*) value 'account-id' "
+                         + "was accepted"))
+
     def InstanceResourceLevelTest(self):
         """
         Function to execute testcase to confirm
@@ -320,7 +506,8 @@ class ComputeResourceLevelTest(EutesterTestCase):
           account by 'instance_admin' user
         * Removal of instances by 'admin' user of account
         """
-        account_name = 'ec2-account'
+        account_name = 'basic-account'
+        self.accounts.append(account_name)
         group_name = 'ec2_instance_admins'
         user_name = 'instance_admin'
         self.tester.info("Creating " + account_name)
@@ -331,34 +518,39 @@ class ComputeResourceLevelTest(EutesterTestCase):
         # Create 'ec2_instance_admins' group and add IAM policy
         self.tester.create_group(group_name, "/",
                                  delegate_account=account_name)
-        self.group_policy_add(group_name, account_name)
-        # Create 'instance_admin' user
-        self.tester.create_user(user_name,
-                                "/",
-                                delegate_account=account_name)
-        # Set up test users
-        self.setup_users(account_name,
-                         group_name,
-                         user_name)
-        for resource_tester in self.testers:
-            if resource_tester.username == 'admin':
-                # If 'admin' user, create EC2 resources
-                for region in self.regions:
-                    self.setup_instance_resources(resource_tester, region)
-            else:
-                # Test API actions against instance resources
-                for region in self.regions:
-                    self.test_instance_resources(resource_tester, region)
-        for resource_tester in self.testers:
-            if resource_tester.username == 'admin':
-                # If 'admin' user, remove EC2 resources
-                for region in self.regions:
-                    self.remove_instance_resources(resource_tester, region)
+        result = self.group_policy_add(group_name, account_name)
+        if result:
+            # Create 'instance_admin' user
+            self.tester.create_user(user_name,
+                                    "/",
+                                    delegate_account=account_name)
+            # Set up test users
+            self.setup_users(account_name,
+                             group_name,
+                             user_name)
+            for resource_tester in self.testers:
+                if resource_tester.username == 'admin':
+                    # If 'admin' user, create EC2 resources
+                    for region in self.regions:
+                        self.setup_instance_resources(resource_tester, region)
+                else:
+                    # Test API actions against instance resources
+                    for region in self.regions:
+                        self.test_instance_resources(resource_tester, region)
+            for resource_tester in self.testers:
+                if resource_tester.username == 'admin':
+                    # If 'admin' user, remove EC2 resources
+                    for region in self.regions:
+                        self.remove_instance_resources(resource_tester, region)
+            # Remove testers from self.testers list
+            self.remove_testers()
 
 if __name__ == '__main__':
     # Define ComputeResourceLevelTest testcase
     testcase = ComputeResourceLevelTest()
-    list = ['InstanceResourceLevelTest']
+    list = ['InstanceResourceLevelTest', 'InstanceAccountResourceLevelTest',
+            'InstanceWildcardAccountResourceLevelTest',
+            'InstanceWildcardResourceLevelTest']
     unit_list = []
     for test in list:
         unit_list.append(testcase.create_testunit_by_name(test))
